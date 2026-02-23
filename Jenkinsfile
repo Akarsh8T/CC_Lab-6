@@ -9,7 +9,6 @@ pipeline {
                 '''
             }
         }
-
         stage('Deploy Backend Containers') {
             steps {
                 sh '''
@@ -20,26 +19,29 @@ pipeline {
                 '''
             }
         }
-
         stage('Deploy NGINX Load Balancer') {
             steps {
                 sh '''
                 docker rm -f nginx-lb || true
-
-                docker run -d \
-                  --name nginx-lb \
-                  --network app-network \
-                  -p 80:80 \
-                  -v $(pwd)/nginx/default.conf:/etc/nginx/conf.d/default.conf \
-                  nginx
+                
+                # Start NGINX without the problematic volume mount
+                docker run -d --name nginx-lb --network app-network -p 80:80 nginx
+                
+                # Wait briefly for the container to initialize
+                sleep 2
+                
+                # Copy the local config file into the container [cite: 677]
+                docker cp nginx/default.conf nginx-lb:/etc/nginx/conf.d/default.conf
+                
+                # Reload NGINX to apply the Round-Robin settings
+                docker exec nginx-lb nginx -s reload
                 '''
             }
         }
     }
-
     post {
         success {
-            echo 'Pipeline executed successfully. NGINX load balancer is running.'
+            echo 'Pipeline executed successfully. NGINX load balancer is running.' [cite: 656]
         }
         failure {
             echo 'Pipeline failed. Check console logs for errors.'
